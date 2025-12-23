@@ -19,3 +19,11 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/
+
+hooks:
+  user_defines:
+    dartcv4:
+      include_modules:
+        - dnn
