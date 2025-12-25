@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+
+import '../services/face_detector_service.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -10,7 +14,10 @@ class CameraScreen extends StatefulWidget {
 
 class _CameraScreenState extends State<CameraScreen> {
   CameraController? _controller;
+  bool _isProcessing = false; // Used to detect if the camera is processing a frame
   bool _isCameraInitialized = false;
+  final _faceDetectorService = FaceDetectorService();
+  Timer? _timer;
 
   @override
   void initState() {
@@ -30,20 +37,27 @@ class _CameraScreenState extends State<CameraScreen> {
       ResolutionPreset.high,
     );
 
-    _controller!.initialize().then((_) {
+    _controller!.initialize().then((_) async {
       if (!mounted) return;
       setState(() {
         _isCameraInitialized = true;
       });
 
+      await _faceDetectorService.initialize();
+
       // Process each camera frame
-      _controller!.startImageStream(_processFrame);
+      _timer = Timer.periodic(const Duration(milliseconds: 200), (_) {
+        _processFrame();
+      });
     });
+
   }
 
   @override
   void dispose() {
     _controller?.dispose();
+    _faceDetectorService.dispose();
+    _timer?.cancel();
     super.dispose();
   }
 
@@ -71,7 +85,23 @@ class _CameraScreenState extends State<CameraScreen> {
     // TODO: Extract faces
   }
 
-  Future<void> _processFrame(CameraImage image) async {
-    // TODO: Process each camera frame
+  Future<void> _processFrame() async {
+    if(!_isCameraInitialized || _isProcessing) return;
+
+    _isProcessing = true;
+
+    final picture = await _controller!.takePicture();
+    final bytes = await picture.readAsBytes();
+
+    final faces = await _faceDetectorService.detectFromBytes(bytes);
+
+    if (faces.isNotEmpty) {
+      debugPrint('Detected ${faces.length} face(s)');
+      for (var face in faces) {
+        // debugPrint(face);
+      }
+    }
+
+    _isProcessing = false;
   }
 }
