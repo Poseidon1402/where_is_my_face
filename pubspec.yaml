@@ -9,7 +9,7 @@ dependencies:
   flutter:
     sdk: flutter
   camera: ^0.11.3
-  opencv_dart: ^2.1.0
+  opencv_dart: ^1.4.3
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
@@ -25,5 +25,11 @@ flutter:
 hooks:
   user_defines:
     dartcv4:
+      exclude_modules:
+        - features2d
+        - contrib
       include_modules:
+        - imgproc
         - dnn
+        - videoio
+
