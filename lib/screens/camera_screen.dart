@@ -35,6 +35,9 @@ class _CameraScreenState extends State<CameraScreen> {
       setState(() {
         _isCameraInitialized = true;
       });
+
+      // Process each camera frame
+      _controller!.startImageStream(_processFrame);
     });
   }
 
@@ -57,21 +60,18 @@ class _CameraScreenState extends State<CameraScreen> {
         child: CircularProgressIndicator(),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          try {
-            final image = await _controller!.takePicture();
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Photo sauvegardée: ${image.path}')),
-              );
-            }
-          } catch (e) {
-            print('Erreur: $e');
-          }
-        },
+        onPressed: extract,
         child: const Icon(Icons.camera),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
+  }
+
+  Future<void> extract() async {
+    // TODO: Extract faces
+  }
+
+  Future<void> _processFrame(CameraImage image) async {
+    // TODO: Process each camera frame
   }
 }
