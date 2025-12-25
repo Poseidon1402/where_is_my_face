@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 
+import '../models/face_detection_result.dart';
+import '../painter/face_detection_painter.dart';
 import '../services/face_detector_service.dart';
 
 class CameraScreen extends StatefulWidget {
@@ -17,6 +19,7 @@ class _CameraScreenState extends State<CameraScreen> {
   bool _isProcessing = false; // Used to detect if the camera is processing a frame
   bool _isCameraInitialized = false;
   final _faceDetectorService = FaceDetectorService();
+  List<FaceDetectionResult> _detectedFaces = [];
   Timer? _timer;
 
   @override
@@ -32,10 +35,7 @@ class _CameraScreenState extends State<CameraScreen> {
     final cameras = await availableCameras();
     if (cameras.isEmpty) return;
 
-    _controller = CameraController(
-      cameras.first,
-      ResolutionPreset.high,
-    );
+    _controller = CameraController(cameras.last, ResolutionPreset.high);
 
     _controller!.initialize().then((_) async {
       if (!mounted) return;
@@ -50,7 +50,6 @@ class _CameraScreenState extends State<CameraScreen> {
         _processFrame();
       });
     });
-
   }
 
   @override
@@ -69,10 +68,23 @@ class _CameraScreenState extends State<CameraScreen> {
         backgroundColor: Colors.black,
       ),
       body: _isCameraInitialized
-          ? CameraPreview(_controller!)
-          : const Center(
-        child: CircularProgressIndicator(),
-      ),
+          ? Stack(
+              fit: StackFit.expand,
+              children: [
+                CameraPreview(_controller!),
+                CustomPaint(
+                  painter: FaceDetectionPainter(
+                    faces: _detectedFaces,
+                    imageSize: Size(
+                      _controller!.value.previewSize!.height,
+                      _controller!.value.previewSize!.width,
+                    ),
+                    screenSize: MediaQuery.sizeOf(context),
+                  ),
+                ),
+              ],
+            )
+          : const Center(child: CircularProgressIndicator()),
       floatingActionButton: FloatingActionButton(
         onPressed: extract,
         child: const Icon(Icons.camera),
@@ -86,7 +98,7 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _processFrame() async {
-    if(!_isCameraInitialized || _isProcessing) return;
+    if (!_isCameraInitialized || _isProcessing) return;
 
     _isProcessing = true;
 
@@ -95,13 +107,11 @@ class _CameraScreenState extends State<CameraScreen> {
 
     final faces = await _faceDetectorService.detectFromBytes(bytes);
 
-    if (faces.isNotEmpty) {
-      debugPrint('Detected ${faces.length} face(s)');
-      for (var face in faces) {
-        // debugPrint(face);
-      }
+    if (mounted) {
+      setState(() => _detectedFaces = faces);
     }
 
     _isProcessing = false;
   }
+
 }
