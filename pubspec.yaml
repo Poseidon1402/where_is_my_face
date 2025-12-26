@@ -28,8 +28,8 @@ hooks:
       exclude_modules:
         - features2d
         - contrib
+        - videoio
       include_modules:
         - imgproc
         - dnn
-        - videoio
 
