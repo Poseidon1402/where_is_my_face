@@ -1,4 +1,4 @@
-# Face Extractor
+# Where is my face ?
 
 A Flutter application that uses AI-powered face detection to identify and extract faces from camera feed or images. Built with the YuNet model for accurate real-time face detection.
 
