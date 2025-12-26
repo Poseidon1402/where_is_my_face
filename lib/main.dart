@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'screens/camera_screen.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
