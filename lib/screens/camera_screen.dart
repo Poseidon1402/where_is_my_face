@@ -17,7 +17,8 @@ class CameraScreen extends StatefulWidget {
   State<CameraScreen> createState() => _CameraScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen> {
+class _CameraScreenState extends State<CameraScreen>
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   CameraController? _controller;
   bool _isProcessing = false;
   bool _isCameraInitialized = false;
@@ -33,14 +34,34 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initializeCamera();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final CameraController? cameraController = _controller;
+
+    // App state changed before we got the chance to initialize.
+    if (cameraController == null || !cameraController.value.isInitialized) {
+      return;
+    }
+
+    if (state == AppLifecycleState.inactive) {
+      cameraController.dispose();
+    } else if (state == AppLifecycleState.resumed) {
+      _initializeCamera();
+    }
   }
 
   Future<void> _initializeCamera() async {
     _cameras = await availableCameras();
     if (_cameras.isEmpty) return;
 
-    _controller = CameraController(_cameras[1], ResolutionPreset.high);
+    _controller = CameraController(
+      _cameras[_currentCameraIndex],
+      ResolutionPreset.high,
+    );
 
     _controller!.initialize().then((_) async {
       if (!mounted) return;
@@ -59,18 +80,40 @@ class _CameraScreenState extends State<CameraScreen> {
   Future<void> _toggleCamera() async {
     if (_cameras.length < 2) return;
 
+    // Stop processing frames
+    _timer?.cancel();
+    _isProcessing = false;
+
+    setState(() {
+      _isCameraInitialized = false;
+      _detectedFaces = [];
+    });
+
+    // Dispose old controller
+    await _controller?.dispose();
+
+    // Switch camera index
     _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
 
-    // await _controller?.dispose();
+    // Initialize new camera
     _controller = CameraController(
       _cameras[_currentCameraIndex],
       ResolutionPreset.high,
     );
 
     await _controller!.initialize();
-    if (mounted) {
-      setState(() {});
-    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _isCameraInitialized = true;
+      _isFlashOn = false; // Reset flash when switching cameras
+    });
+
+    // Restart frame processing
+    _timer = Timer.periodic(const Duration(milliseconds: 200), (_) {
+      _processFrame();
+    });
   }
 
   Future<void> _toggleFlash() async {
@@ -87,6 +130,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
     _faceDetectorService.dispose();
     _timer?.cancel();
@@ -108,6 +152,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 CustomPaint(
                   painter: FaceDetectionPainter(
                     faces: _detectedFaces,
+                    isInverted: _currentCameraIndex != 0,
                     imageSize: Size(
                       _controller!.value.previewSize!.height,
                       _controller!.value.previewSize!.width,
@@ -390,17 +435,27 @@ class _CameraScreenState extends State<CameraScreen> {
   Future<void> _processFrame() async {
     if (!_isCameraInitialized || _isProcessing) return;
 
+    // Check if controller is still valid
+    if (_controller == null || !_controller!.value.isInitialized) return;
+
     _isProcessing = true;
 
-    _picture = await _controller!.takePicture();
-    final bytes = await _picture?.readAsBytes();
+    try {
+      _picture = await _controller!.takePicture();
+      final bytes = await _picture?.readAsBytes();
 
-    final faces = await _faceDetectorService.detectFromBytes(bytes!);
+      if (bytes != null) {
+        final faces = await _faceDetectorService.detectFromBytes(bytes);
 
-    if (mounted) {
-      setState(() => _detectedFaces = faces);
+        if (mounted) {
+          setState(() => _detectedFaces = faces);
+        }
+      }
+    } catch (e) {
+      // Ignore errors during camera switching
+      debugPrint('Error processing frame: $e');
+    } finally {
+      _isProcessing = false;
     }
-
-    _isProcessing = false;
   }
 }
