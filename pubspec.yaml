@@ -29,6 +29,11 @@ hooks:
         - features2d
         - contrib
         - videoio
+        - imgproc
+        - highgui
+        - imgcodecs
+        - videoio
+        - calib3d
       include_modules:
         - imgproc
         - dnn
