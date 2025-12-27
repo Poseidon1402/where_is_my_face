@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:opencv_dart/opencv.dart' as cv;
 
 import '../components/extracted_faces_dialog.dart';
@@ -27,7 +28,6 @@ class _CameraScreenState extends State<CameraScreen>
   List<FaceDetectionResult> _detectedFaces = [];
   XFile? _picture;
   Timer? _timer;
-  String _selectedMode = 'DETECT'; // VIDEO, DETECT, PORTRAIT
   List<CameraDescription> _cameras = [];
   int _currentCameraIndex = 0;
 
@@ -275,11 +275,6 @@ class _CameraScreenState extends State<CameraScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Mode Selector
-            _buildModeSelector(),
-
-            const SizedBox(height: 30),
-
             // Camera Controls
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 30),
@@ -287,18 +282,21 @@ class _CameraScreenState extends State<CameraScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   // Gallery Button
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white30, width: 2),
-                    ),
-                    child: const Icon(
-                      Icons.photo_library,
-                      color: Colors.white,
-                      size: 30,
+                  GestureDetector(
+                    onTap: _pickImageFromGallery,
+                    child: Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white30, width: 2),
+                      ),
+                      child: const Icon(
+                        Icons.photo_library,
+                        color: Colors.white,
+                        size: 30,
+                      ),
                     ),
                   ),
 
@@ -360,39 +358,7 @@ class _CameraScreenState extends State<CameraScreen>
     );
   }
 
-  Widget _buildModeSelector() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _buildModeButton('VIDEO'),
-        const SizedBox(width: 40),
-        _buildModeButton('DETECT'),
-        const SizedBox(width: 40),
-        _buildModeButton('PORTRAIT'),
-      ],
-    );
-  }
-
-  Widget _buildModeButton(String mode) {
-    final isSelected = _selectedMode == mode;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedMode = mode;
-        });
-      },
-      child: Text(
-        mode,
-        style: TextStyle(
-          color: isSelected ? Colors.cyan : Colors.white60,
-          fontSize: 16,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          letterSpacing: 1.2,
-        ),
-      ),
-    );
-  }
-
+  /// Extract detected faces from the last captured picture
   Future<void> extract() async {
     if (_detectedFaces.isEmpty) {
       ScaffoldMessenger.of(
@@ -432,6 +398,7 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
+  /// Process a single frame from the camera
   Future<void> _processFrame() async {
     if (!_isCameraInitialized || _isProcessing) return;
 
@@ -456,6 +423,51 @@ class _CameraScreenState extends State<CameraScreen>
       debugPrint('Error processing frame: $e');
     } finally {
       _isProcessing = false;
+    }
+  }
+
+  /// Pick image from gallery and process it
+  Future<void> _pickImageFromGallery() async {
+    // Implement image picking from gallery
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      final bytes = await image.readAsBytes();
+      final faces = await _faceDetectorService.detectFromBytes(bytes);
+
+      if (mounted) {
+        setState(() {
+          _detectedFaces = faces;
+          _picture = image;
+        });
+      }
+
+      // Show dialog with extracted faces
+      if (faces.isNotEmpty && mounted) {
+        List<Uint8List> extractedFaces = [];
+        final cv.Mat imgMat = cv.imdecode(bytes, cv.IMREAD_COLOR);
+
+        for (final face in faces) {
+          final rect = cv.Rect(
+            face.boundingBox.left.toInt(),
+            face.boundingBox.top.toInt(),
+            face.boundingBox.width.toInt(),
+            face.boundingBox.height.toInt(),
+          );
+
+          final cv.Mat faceMat = imgMat.region(rect);
+          final (_, faceBytes) = cv.imencode('.jpg', faceMat);
+          extractedFaces.add(faceBytes);
+          faceMat.dispose();
+        }
+
+        imgMat.dispose();
+
+        showDialog(
+          context: context,
+          builder: (context) => ExtractedFacesDialog(faces: extractedFaces),
+        );
+      }
     }
   }
 }

@@ -14,14 +14,12 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Extracteo',
+      title: 'WIMFace',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: Scaffold(
-        body: const CameraScreen(),
-      ),
+      home: Scaffold(body: const CameraScreen()),
     );
   }
 }
