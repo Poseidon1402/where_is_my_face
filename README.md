@@ -97,7 +97,6 @@ assets/
 ## 📝 To-Do List
 
 ### High Priority
-- [ ] **Pick Image from Gallery** - Add functionality to select and process images from device gallery
 - [ ] **Save to Device Storage** - Implement actual file saving functionality with proper permissions
 - [ ] **Image Gallery View** - Create a screen to view all previously extracted faces
 
@@ -116,7 +115,8 @@ assets/
 - [x] Confidence score display
 - [x] Modern UI implementation
 - [x] Face selection in dialog
-- [x] Batch face saving
+- [x] Pick Image from Gallery
+
 
 ## 🔧 Configuration
 
