@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class ExtractedFacesDialog extends StatefulWidget {
   final List<Uint8List> faces;
@@ -12,14 +14,104 @@ class ExtractedFacesDialog extends StatefulWidget {
 }
 
 class _ExtractedFacesDialogState extends State<ExtractedFacesDialog> {
-  final Set<int> _selectedFaces = {};
+  Set<int> _selectedFaces = {};
 
   @override
   void initState() {
     super.initState();
-    // If only one face, select it by default
     if (widget.faces.length == 1) {
       _selectedFaces.add(0);
+    }
+  }
+
+  /// Request storage permission
+  Future<bool> _requestStoragePermission() async {
+    if (await Permission.photos.isGranted) {
+      return true;
+    }
+
+    final status = await Permission.photos.request();
+    return status.isGranted;
+  }
+
+  /// Save a single face to gallery
+  Future<bool> _saveFaceToGallery(Uint8List faceBytes, int index) async {
+    try {
+      final result = await ImageGallerySaverPlus.saveImage(
+        faceBytes,
+        quality: 100,
+        name: "face_${DateTime.now().millisecondsSinceEpoch}_$index",
+      );
+      return result['isSuccess'] ?? false;
+    } catch (e) {
+      debugPrint('Error saving image: $e');
+      return false;
+    }
+  }
+
+  /// Save selected faces
+  Future<void> _saveSelectedFaces() async {
+    if (_selectedFaces.isEmpty) return;
+
+    final hasPermission = await _requestStoragePermission();
+    if (!hasPermission) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Storage permission is required to save images'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    int savedCount = 0;
+    for (final index in _selectedFaces) {
+      final success = await _saveFaceToGallery(widget.faces[index], index);
+      if (success) savedCount++;
+    }
+
+    if (mounted) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$savedCount face(s) saved to gallery'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  /// Save all faces
+  Future<void> _saveAllFaces() async {
+    final hasPermission = await _requestStoragePermission();
+    if (!hasPermission) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Storage permission is required to save images'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    int savedCount = 0;
+    for (int i = 0; i < widget.faces.length; i++) {
+      final success = await _saveFaceToGallery(widget.faces[i], i);
+      if (success) savedCount++;
+    }
+
+    if (mounted) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$savedCount face(s) saved to gallery'),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
 
@@ -39,12 +131,8 @@ class _ExtractedFacesDialogState extends State<ExtractedFacesDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Status Badge
             _buildStatusBadge(isSingleFace),
-
             const SizedBox(height: 24),
-
-            // Title
             Text(
               isSingleFace ? 'Face Extracted' : 'Select Faces',
               style: const TextStyle(
@@ -53,15 +141,9 @@ class _ExtractedFacesDialogState extends State<ExtractedFacesDialog> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 32),
-
-            // Face(s) Display
             if (isSingleFace) _buildSingleFace() else _buildMultipleFaces(),
-
             const SizedBox(height: 24),
-
-            // Description Text
             Text(
               isSingleFace
                   ? 'The facial features have been successfully isolated. What would you like to do with this capture?'
@@ -73,23 +155,20 @@ class _ExtractedFacesDialogState extends State<ExtractedFacesDialog> {
                 height: 1.5,
               ),
             ),
-
             const SizedBox(height: 32),
-
-            // Action Buttons
             if (isSingleFace)
               _buildSingleFaceButtons()
             else
               _buildMultipleFacesButtons(),
-
             const SizedBox(height: 16),
-
-            // Cancel Button
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text(
                 'Cancel',
-                style: TextStyle(color: Colors.white38, fontSize: 16),
+                style: TextStyle(
+                  color: Colors.white38,
+                  fontSize: 16,
+                ),
               ),
             ),
           ],
@@ -137,7 +216,12 @@ class _ExtractedFacesDialogState extends State<ExtractedFacesDialog> {
         shape: BoxShape.circle,
         border: Border.all(color: Colors.cyan.withValues(alpha: 0.3), width: 3),
       ),
-      child: ClipOval(child: Image.memory(widget.faces[0], fit: BoxFit.cover)),
+      child: ClipOval(
+        child: Image.memory(
+          widget.faces[0],
+          fit: BoxFit.cover,
+        ),
+      ),
     );
   }
 
@@ -220,18 +304,11 @@ class _ExtractedFacesDialogState extends State<ExtractedFacesDialog> {
   Widget _buildSingleFaceButtons() {
     return Column(
       children: [
-        // Save to Storage Button
         SizedBox(
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
-            onPressed: () {
-              // Save to storage action
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Face saved to storage')),
-              );
-            },
+            onPressed: _saveSelectedFaces,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.cyan,
               foregroundColor: Colors.black,
@@ -246,14 +323,16 @@ class _ExtractedFacesDialogState extends State<ExtractedFacesDialog> {
                 SizedBox(width: 12),
                 Text(
                   'Save to Storage',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
           ),
         ),
         const SizedBox(height: 12),
-        // Take Picture Again Button
         SizedBox(
           width: double.infinity,
           height: 56,
@@ -275,7 +354,10 @@ class _ExtractedFacesDialogState extends State<ExtractedFacesDialog> {
                 SizedBox(width: 12),
                 Text(
                   'Take Picture Again',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
@@ -288,27 +370,14 @@ class _ExtractedFacesDialogState extends State<ExtractedFacesDialog> {
   Widget _buildMultipleFacesButtons() {
     return Column(
       children: [
-        // Save Selected Face Button
         SizedBox(
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
-            onPressed: _selectedFaces.isEmpty
-                ? null
-                : () {
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          '${_selectedFaces.length} face(s) saved to storage',
-                        ),
-                      ),
-                    );
-                  },
+            onPressed: _selectedFaces.isEmpty ? null : _saveSelectedFaces,
             style: ElevatedButton.styleFrom(
-              backgroundColor: _selectedFaces.isEmpty
-                  ? Colors.grey
-                  : Colors.cyan,
+              backgroundColor:
+                  _selectedFaces.isEmpty ? Colors.grey : Colors.cyan,
               foregroundColor: Colors.black,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -321,28 +390,21 @@ class _ExtractedFacesDialogState extends State<ExtractedFacesDialog> {
                 SizedBox(width: 12),
                 Text(
                   'Save Selected Face',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
           ),
         ),
         const SizedBox(height: 12),
-        // Save All Faces Button
         SizedBox(
           width: double.infinity,
           height: 56,
           child: OutlinedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    '${widget.faces.length} faces saved to storage',
-                  ),
-                ),
-              );
-            },
+            onPressed: _saveAllFaces,
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.white,
               side: const BorderSide(color: Colors.white24, width: 2),
@@ -357,14 +419,16 @@ class _ExtractedFacesDialogState extends State<ExtractedFacesDialog> {
                 SizedBox(width: 12),
                 Text(
                   'Save All Faces',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
           ),
         ),
         const SizedBox(height: 12),
-        // Take Picture Again Button
         SizedBox(
           width: double.infinity,
           height: 56,
@@ -386,7 +450,10 @@ class _ExtractedFacesDialogState extends State<ExtractedFacesDialog> {
                 SizedBox(width: 12),
                 Text(
                   'Take Picture Again',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
